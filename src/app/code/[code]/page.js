@@ -1,52 +1,39 @@
 // path: src/app/code/[code]/page.js
 "use client";
-
-import { useEffect } from "react";
 import useSWR from "swr";
 import { useParams } from "next/navigation";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
 
-const fetcher = (url) =>
-    fetch(url).then((r) => {
-        if (!r.ok) throw new Error("Fetch error: " + r.status);
-        return r.json();
-    });
+const fetcher = (url) => fetch(url).then((r) => r.json());
 
-export default function CodeStatsPage() {
+export default function CodeStats() {
     const params = useParams();
-    const code = params?.code; // safe client-side
+    const code = params?.code;
+    const { data, error, isLoading, mutate } = useSWR(code ? `/api/links/${encodeURIComponent(code)}` : null, fetcher);
 
-    const { data, error, isLoading, mutate } = useSWR(
-        code ? `/api/links/${encodeURIComponent(code)}` : null,
-        fetcher
-    );
-
-    useEffect(() => {
-        // optional: revalidate when code changes
-        if (code) mutate();
-    }, [code, mutate]);
-
-    if (!code) return <div style={{ padding: 24 }}>Loading...</div>;
-    if (isLoading) return <div style={{ padding: 24 }}>Loading stats…</div>;
-    if (error) return <div style={{ padding: 24, color: "crimson" }}>Failed to load stats</div>;
-    if (!data) return <div style={{ padding: 24 }}>No data</div>;
+    if (!code) return <div>Loading...</div>;
+    if (isLoading) return <div>Loading…</div>;
+    if (error) return <div style={{ color: "crimson" }}>Failed to load stats</div>;
+    if (!data) return <div>No data</div>;
 
     return (
-        <main style={{ padding: 24, maxWidth: 900, margin: "auto" }}>
-            <h1 style={{ fontSize: 22, marginBottom: 8 }}>Stats for <code>{data.code}</code></h1>
+        <Card>
+            <CardContent>
+                <Typography variant="h6">Stats — <code>{data.code}</code></Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}><strong>Target URL:</strong> <a href={data.url} target="_blank" rel="noreferrer">{data.url}</a></Typography>
+                <Typography sx={{ mt: 1 }}><strong>Total clicks:</strong> {data.clicks}</Typography>
+                <Typography sx={{ mt: 1 }}><strong>Last clicked:</strong> {data.lastClicked ? new Date(data.lastClicked).toLocaleString() : "Never"}</Typography>
+                <Typography sx={{ mt: 1 }}><strong>Created:</strong> {new Date(data.createdAt).toLocaleString()}</Typography>
 
-            <div style={{ background: "#fff", padding: 16, borderRadius: 8 }}>
-                <p><strong>Target URL:</strong> <a href={data.url} target="_blank" rel="noreferrer">{data.url}</a></p>
-                <p><strong>Total clicks:</strong> {data.clicks}</p>
-                <p><strong>Last clicked:</strong> {data.lastClicked ? new Date(data.lastClicked).toLocaleString() : "Never"}</p>
-                <p><strong>Created:</strong> {new Date(data.createdAt).toLocaleString()}</p>
-
-                <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                    <button onClick={() => navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_BASE_URL}/${data.code}`)}>
-                        Copy short URL
-                    </button>
-                    <button onClick={() => mutate()}>Refresh</button>
-                </div>
-            </div>
-        </main>
+                <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                    <Button variant="outlined" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${data.code}`)}>Copy short URL</Button>
+                    <Button variant="contained" onClick={() => mutate()}>Refresh</Button>
+                </Stack>
+            </CardContent>
+        </Card>
     );
 }

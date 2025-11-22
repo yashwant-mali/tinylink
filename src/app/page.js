@@ -1,65 +1,97 @@
-import Image from "next/image";
+// path: src/app/page.js
+"use client";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
 
-export default function Home() {
+const fetcher = (url) => fetch(url).then(r => r.json());
+
+function shortDisplay(url, max = 70) {
+  return url.length > max ? url.slice(0, max - 3) + "..." : url;
+}
+
+export default function DashboardPage() {
+  const { data: links, mutate } = useSWR("/api/links", fetcher);
+  const [url, setUrl] = useState("");
+  const [code, setCode] = useState("");
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => setErr(""), [url, code]);
+
+  async function create(e) {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, code: code || null })
+      });
+      if (res.status === 409) {
+        setErr("Code already exists");
+      } else if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setErr(j?.error || "Failed");
+      } else {
+        setUrl(""); setCode("");
+        await mutate();
+      }
+    } catch {
+      setErr("Network error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete(c) {
+    if (!confirm(`Delete ${c}?`)) return;
+    await fetch(`/api/links/${c}`, { method: "DELETE" });
+    await mutate();
+  }
+
+  const items = (links || []).filter(l => {
+    if (!q) return true;
+    return l.code.includes(q) || l.url.includes(q);
+  });
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div>
+      <section style={{ marginBottom: 18, background: "#fff", padding: 16, borderRadius: 8 }}>
+        <form onSubmit={create} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input required placeholder="https://example.com/long/path" value={url} onChange={e => setUrl(e.target.value)} style={{ flex: "1 1 420px", padding: 10, borderRadius: 6, border: "1px solid #ddd" }} />
+          <input placeholder="custom code (optional)" value={code} onChange={e => setCode(e.target.value)} style={{ width: 220, padding: 10, borderRadius: 6, border: "1px solid #ddd" }} />
+          <button disabled={loading} style={{ padding: "10px 14px", borderRadius: 6 }}>Create</button>
+        </form>
+        {err && <div style={{ color: "crimson", marginTop: 8 }}>{err}</div>}
+      </section>
+
+      <section style={{ marginBottom: 12 }}>
+        <input placeholder="Search by code or URL" value={q} onChange={e => setQ(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 6, border: "1px solid #ddd" }} />
+      </section>
+
+      <section style={{ background: "#fff", padding: 12, borderRadius: 8 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}><th style={{ padding: 8 }}>Code</th><th>Target</th><th>Clicks</th><th>Last clicked</th><th>Actions</th></tr></thead>
+          <tbody>
+            {(items || []).length === 0 && (<tr><td colSpan="5" style={{ padding: 12 }}>No links</td></tr>)}
+            {(items || []).map(l => (
+              <tr key={l.code} style={{ borderTop: "1px solid #f5f5f5" }}>
+                <td style={{ padding: 8 }}><a href={`/${l.code}`} target="_blank" rel="noreferrer">{l.code}</a></td>
+                <td style={{ padding: 8 }} title={l.url}>{shortDisplay(l.url)}</td>
+                <td style={{ padding: 8 }}>{l.clicks}</td>
+                <td style={{ padding: 8 }}>{l.lastClicked ? new Date(l.lastClicked).toLocaleString() : "-"}</td>
+                <td style={{ padding: 8 }}>
+                  <button onClick={() => navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_BASE_URL}/${l.code}`)}>Copy</button>{" "}
+                  <button onClick={() => handleDelete(l.code)} style={{ color: "crimson" }}>Delete</button>{" "}
+                  <a href={`/code/${l.code}`}>Stats</a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 }
